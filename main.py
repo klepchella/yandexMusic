@@ -17,6 +17,7 @@ class EmptyError(Exception):
     message = "Empty response"
 
 
+MAX_RETRIES = 10
 TOKEN = ""
 
 
@@ -98,30 +99,35 @@ def get_data_from_album(album: Album) -> tuple[str, dict[str, str]]:
 def parsing_ym(start_item: int, end_item: int) -> None:
     result = []
     client = init_client(TOKEN)
-
-    try:
-        for id_ in range(start_item, end_item + 1):
+    retries = 0
+    id_ = start_item
+    while id_ <= end_item and retries <= MAX_RETRIES:
+        try:
             if id_ % 1000 == 0:
                 print(id_)
 
             response = get_request(client, id_)
             if response.error:
+                id_ = id_ + 1
                 continue
             try:
-                # genre, res = response_parse(response)
                 genre, res = get_data_from_album(response)
             except EmptyError:
-                # sleep(1)
+                id_ = id_ + 1
                 continue
             if genre not in ["audiobook", "podcast"]:
-                # sleep(1)
+                id_ = id_ + 1
                 continue
             else:
                 result.append(res)
+        except (CaptchaError, TimeoutError, Exception) as exc:
+            print(id_)
+            print(f"Captcha error: {exc}")
+            retries += 1
+            print(f"retry: {retries}")
+        else:
+            id_ += 1
 
-    except (CaptchaError, TimeoutError, Exception) as exc:
-        print(id_)
-        print(f"Captcha error: {exc}")
     if result:
         write_result(result)
         print(f"Data was written to file, end_id={id_}")
@@ -139,5 +145,4 @@ def write_result(result_list: list[dict[str, str]]) -> None:
 if __name__ == "__main__":
     start_item = int(sys.argv[1])
     end_item = int(sys.argv[2])
-    # end_item = start_item + 10
     parsing_ym(start_item, end_item)
